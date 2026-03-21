@@ -1,0 +1,21 @@
+{
+  "name": "runbook-generator",
+  "version": "1.0.0",
+  "description": "Support Runbook Generator using OpenAI and Supabase",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "support",
+    "runbook",
+    "openai",
+    "supabase"
+  ],
+  "author": "Henna Singh",
+  "license": "MIT",
+  "type": "module",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.99.3",
+    "openai": "^6.32.0"
+  }
+}
