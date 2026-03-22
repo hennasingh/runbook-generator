@@ -8,6 +8,9 @@ const loadingDiv = document.getElementById('loading');
 const errorDiv = document.getElementById('error');
 const saveBtn = document.getElementById('saveBtn');
 
+// Store current runbook data
+let currentRunbook = null;
+
 // Handle form submission
 form.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -20,6 +23,16 @@ form.addEventListener('submit', async (e) => {
     }
 
     await generateRunbook(problemDescription);
+});
+
+// Handle save button
+saveBtn.addEventListener('click', async () => {
+    if (!currentRunbook) {
+        showError('No runbook to save');
+        return;
+    }
+
+    await saveRunbook(currentRunbook);
 });
 
 async function generateRunbook(problemDescription) {
@@ -43,6 +56,7 @@ async function generateRunbook(problemDescription) {
         }
 
         const runbook = await response.json();
+        currentRunbook = runbook; // Store for saving later
         displayRunbook(runbook);
         loadingDiv.classList.add('hidden');
         resultDiv.classList.remove('hidden');
@@ -111,11 +125,60 @@ function displayRunbook(runbook) {
         resultContent.appendChild(escalationSection);
     }
 }
+async function saveRunbook(runbook) {
+    try {
+        saveBtn.disabled = true;
+        const originalText = saveBtn.textContent;
+        saveBtn.textContent = 'Saving...';
+
+        const response = await fetch('/api/saveRunbook', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(runbook)
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Failed to save runbook');
+        }
+
+        const result = await response.json();
+        
+        // Show success message
+        showSuccess(`✅ Runbook saved with ID: ${result.runbook.id}`);
+        
+        // Reset form
+        problemInput.value = '';
+        currentRunbook = null;
+        resultDiv.classList.add('hidden');
+
+    } catch (error) {
+        showError(error.message);
+    } finally {
+        saveBtn.disabled = false;
+        saveBtn.textContent = originalText;
+    }
+}
 
 function showError(message) {
     errorDiv.textContent = `❌ ${message}`;
     errorDiv.classList.remove('hidden');
     resultDiv.classList.add('hidden');
+    loadingDiv.classList.add('hidden');
+}
+
+function showSuccess(message) {
+    errorDiv.textContent = message;
+    errorDiv.classList.remove('hidden');
+    errorDiv.style.backgroundColor = '#e8f5e9';
+    errorDiv.style.color = '#2e7d32';
+    errorDiv.style.borderLeftColor = '#2e7d32';
+    setTimeout(() => {
+        errorDiv.classList.add('hidden');
+        errorDiv.style.backgroundColor = '';
+        errorDiv.style.color = '';
+        errorDiv.style.borderLeftColor = '';
+    }, 3000); // Hide after 3 seconds
     loadingDiv.classList.add('hidden');
 }
 
