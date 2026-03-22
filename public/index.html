@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Runbook Generator</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🚨 Runbook Generator</h1>
+            <p>Describe your problem, get a structured runbook instantly</p>
+        </header>
+
+        <main>
+            <form id="problemForm">
+                <div class="form-group">
+                    <label for="problemInput">Problem Description:</label>
+                    <textarea 
+                        id="problemInput" 
+                        rows="6" 
+                        placeholder="Describe the issue you're experiencing..." 
+                        required></textarea>
+                </div>
+                <button type="submit" id="generateBtn">Generate Runbook</button>
+            </form>
+
+            <div id="result" class="result-container hidden">
+                <div id="resultContent"></div>
+                <button id="saveBtn" class="save-btn hidden">Save Runbook</button>
+            </div>
+
+            <div id="loading" class="loading hidden">
+                <div class="spinner"></div>
+                <p>Generating runbook...</p>
+            </div>
+
+            <div id="error" class="error hidden"></div>
+        </main>
+    </div>
+
+    <script type="module" src="src/main.js"></script>
+</body>
+</html>
