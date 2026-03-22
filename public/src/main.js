@@ -21,8 +21,19 @@ const prevBtn = document.getElementById('prevBtn');
 const nextBtn = document.getElementById('nextBtn');
 const pageInfo = document.getElementById('pageInfo');
 
+// Delete Modal elements
+const deleteModal = document.getElementById('deleteModal');
+const cancelDeleteBtn = document.getElementById('cancelDeleteBtn');
+const confirmDeleteBtn = document.getElementById('confirmDeleteBtn');
+
 // Store current runbook data
 let currentRunbook = null;
+
+// Delete state
+let deleteState = {
+    runbookId: null,
+    runbookTitle: null
+};
 
 // Browse state
 let browseState = {
@@ -86,6 +97,23 @@ clearSearchBtn.addEventListener('click', () => {
     browseState.currentPage = 1;
     clearSearchBtn.classList.add('hidden');
     loadBrowseRunbooks(1);
+});
+
+// Delete Modal Event Listeners
+cancelDeleteBtn.addEventListener('click', () => {
+    closeDeleteModal();
+});
+
+confirmDeleteBtn.addEventListener('click', async () => {
+    if (deleteState.runbookId) {
+        await performDelete(deleteState.runbookId);
+    }
+});
+
+deleteModal.addEventListener('click', (e) => {
+    if (e.target === deleteModal) {
+        closeDeleteModal();
+    }
 });
 
 prevBtn.addEventListener('click', () => {
@@ -342,14 +370,24 @@ function displayRunbookCards(runbooks, isSearch) {
         card.innerHTML = `
             <div class="card-header">
                 <div class="card-title">${escapeHtml(runbook.title)}</div>
+                <button class="card-delete-icon" data-id="${runbook.id}" data-title="${escapeHtml(runbook.title)}" title="Delete runbook">×</button>
                 <span class="card-expand-icon">›</span>
             </div>
             <p class="card-summary">${escapeHtml(runbook.summary || 'No description')}</p>
             <div class="card-date">${formattedDate}</div>
         `;
 
-        card.addEventListener('click', () => {
-            expandRunbookCard(runbook);
+        card.addEventListener('click', (e) => {
+            if (!e.target.classList.contains('card-delete-icon')) {
+                expandRunbookCard(runbook);
+            }
+        });
+
+        // Add delete icon event listener
+        const deleteIcon = card.querySelector('.card-delete-icon');
+        deleteIcon.addEventListener('click', (e) => {
+            e.stopPropagation();
+            openDeleteModal(runbook.id, runbook.title);
         });
 
         browseResults.appendChild(card);
@@ -456,4 +494,55 @@ function escapeHtml(text) {
         "'": '&#039;'
     };
     return text.replace(/[&<>"']/g, m => map[m]);
+}
+
+// Delete Functions
+function openDeleteModal(runbookId, runbookTitle) {
+    deleteState.runbookId = runbookId;
+    deleteState.runbookTitle = runbookTitle;
+    deleteModal.classList.remove('hidden');
+}
+
+function closeDeleteModal() {
+    deleteModal.classList.add('hidden');
+    deleteState.runbookId = null;
+    deleteState.runbookTitle = null;
+    confirmDeleteBtn.disabled = false;
+}
+
+async function performDelete(runbookId) {
+    try {
+        confirmDeleteBtn.disabled = true;
+        const originalText = confirmDeleteBtn.textContent;
+        confirmDeleteBtn.textContent = 'Deleting...';
+
+        const response = await fetch('/api/deleteRunbook', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: runbookId })
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Failed to delete runbook');
+        }
+
+        // Close modal
+        closeDeleteModal();
+
+        // Show success message
+        showSuccess(`✅ Runbook deleted successfully`);
+
+        // Refresh the browse section
+        if (browseState.searchQuery) {
+            await searchRunbooks(browseState.searchQuery, browseState.currentPage);
+        } else {
+            await loadBrowseRunbooks(browseState.currentPage);
+        }
+
+    } catch (error) {
+        showBrowseError(error.message);
+        confirmDeleteBtn.disabled = false;
+        confirmDeleteBtn.textContent = originalText;
+    }
 }
