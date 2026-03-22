@@ -8,8 +8,35 @@ const loadingDiv = document.getElementById('loading');
 const errorDiv = document.getElementById('error');
 const saveBtn = document.getElementById('saveBtn');
 
+// Browse section DOM elements
+const searchInput = document.getElementById('searchInput');
+const searchBtn = document.getElementById('searchBtn');
+const clearSearchBtn = document.getElementById('clearSearchBtn');
+const browseResults = document.getElementById('browseResults');
+const browseLoading = document.getElementById('browseLoading');
+const browseError = document.getElementById('browseError');
+const noResults = document.getElementById('noResults');
+const browsePagination = document.getElementById('browsePagination');
+const prevBtn = document.getElementById('prevBtn');
+const nextBtn = document.getElementById('nextBtn');
+const pageInfo = document.getElementById('pageInfo');
+
 // Store current runbook data
 let currentRunbook = null;
+
+// Browse state
+let browseState = {
+    currentPage: 1,
+    searchQuery: null,
+    totalResults: 0,
+    hasNext: false,
+    hasPrev: false
+};
+
+// Initialize browse on page load
+document.addEventListener('DOMContentLoaded', () => {
+    loadBrowseRunbooks(1);
+});
 
 // Handle form submission
 form.addEventListener('submit', async (e) => {
@@ -33,6 +60,52 @@ saveBtn.addEventListener('click', async () => {
     }
 
     await saveRunbook(currentRunbook);
+});
+
+// Browse and Search Event Listeners
+searchBtn.addEventListener('click', async () => {
+    const query = searchInput.value.trim();
+    if (!query) {
+        showBrowseError('Please enter a search term');
+        return;
+    }
+    browseState.searchQuery = query;
+    browseState.currentPage = 1;
+    await searchRunbooks(query, 1);
+});
+
+searchInput.addEventListener('keypress', async (e) => {
+    if (e.key === 'Enter') {
+        searchBtn.click();
+    }
+});
+
+clearSearchBtn.addEventListener('click', () => {
+    searchInput.value = '';
+    browseState.searchQuery = null;
+    browseState.currentPage = 1;
+    clearSearchBtn.classList.add('hidden');
+    loadBrowseRunbooks(1);
+});
+
+prevBtn.addEventListener('click', () => {
+    if (browseState.currentPage > 1) {
+        browseState.currentPage--;
+        if (browseState.searchQuery) {
+            searchRunbooks(browseState.searchQuery, browseState.currentPage);
+        } else {
+            loadBrowseRunbooks(browseState.currentPage);
+        }
+    }
+});
+
+nextBtn.addEventListener('click', () => {
+    browseState.currentPage++;
+    if (browseState.searchQuery) {
+        searchRunbooks(browseState.searchQuery, browseState.currentPage);
+    } else {
+        loadBrowseRunbooks(browseState.currentPage);
+    }
 });
 
 async function generateRunbook(problemDescription) {
@@ -180,6 +253,198 @@ function showSuccess(message) {
         errorDiv.style.borderLeftColor = '';
     }, 3000); // Hide after 3 seconds
     loadingDiv.classList.add('hidden');
+}
+
+// Browse & Search Functions
+async function loadBrowseRunbooks(page) {
+    try {
+        browseLoading.classList.remove('hidden');
+        browseResults.innerHTML = '';
+        browseError.classList.add('hidden');
+        noResults.classList.add('hidden');
+
+        const response = await fetch(`/api/listRunbooks?page=${page}&limit=10`);
+        if (!response.ok) {
+            throw new Error('Failed to load runbooks');
+        }
+
+        const data = await response.json();
+        browseState.currentPage = data.page;
+        browseState.totalResults = data.total;
+        browseState.hasNext = data.hasNext;
+        browseState.hasPrev = data.hasPrev;
+
+        if (data.runbooks.length === 0) {
+            noResults.classList.remove('hidden');
+            browsePagination.classList.add('hidden');
+        } else {
+            displayRunbookCards(data.runbooks, false);
+            updatePaginationControls();
+        }
+
+        browseLoading.classList.add('hidden');
+
+    } catch (error) {
+        showBrowseError(error.message);
+        browseLoading.classList.add('hidden');
+    }
+}
+
+async function searchRunbooks(query, page) {
+    try {
+        browseLoading.classList.remove('hidden');
+        browseResults.innerHTML = '';
+        browseError.classList.add('hidden');
+        noResults.classList.add('hidden');
+
+        const response = await fetch(`/api/searchRunbooks?q=${encodeURIComponent(query)}&page=${page}&limit=10`);
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Search failed');
+        }
+
+        const data = await response.json();
+        browseState.currentPage = data.page;
+        browseState.totalResults = data.total;
+        browseState.hasNext = data.hasNext;
+        browseState.hasPrev = data.hasPrev;
+        clearSearchBtn.classList.remove('hidden');
+
+        if (data.runbooks.length === 0) {
+            noResults.textContent = `📭 No runbooks found for "${query}"`;
+            noResults.classList.remove('hidden');
+            browsePagination.classList.add('hidden');
+        } else {
+            displayRunbookCards(data.runbooks, true);
+            updatePaginationControls();
+        }
+
+        browseLoading.classList.add('hidden');
+
+    } catch (error) {
+        showBrowseError(error.message);
+        browseLoading.classList.add('hidden');
+    }
+}
+
+function displayRunbookCards(runbooks, isSearch) {
+    browseResults.innerHTML = '';
+
+    runbooks.forEach(runbook => {
+        const card = document.createElement('div');
+        card.className = 'runbook-card';
+        card.dataset.id = runbook.id;
+
+        // Format date
+        const date = new Date(runbook.created_at);
+        const formattedDate = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
+        card.innerHTML = `
+            <div class="card-header">
+                <div class="card-title">${escapeHtml(runbook.title)}</div>
+                <span class="card-expand-icon">›</span>
+            </div>
+            <p class="card-summary">${escapeHtml(runbook.summary || 'No description')}</p>
+            <div class="card-date">${formattedDate}</div>
+        `;
+
+        card.addEventListener('click', () => {
+            expandRunbookCard(runbook);
+        });
+
+        browseResults.appendChild(card);
+    });
+}
+
+function expandRunbookCard(runbook) {
+    // Check if already expanded
+    const existingExpanded = browseResults.querySelector('.card-expanded');
+    if (existingExpanded) {
+        existingExpanded.remove();
+    }
+
+    const expandedView = document.createElement('div');
+    expandedView.className = 'card-expanded';
+
+    // Create full runbook display
+    let content = `<h3>${escapeHtml(runbook.title)}</h3>`;
+
+    // Summary
+    if (runbook.summary) {
+        content += `
+            <div class="runbook-section">
+                <h4>Problem Summary</h4>
+                <p>${escapeHtml(runbook.summary)}</p>
+            </div>
+        `;
+    }
+
+    // Affected Components
+    if (runbook.affected_components && runbook.affected_components.length > 0) {
+        content += `<div class="runbook-section"><h4>Affected Components</h4>`;
+        runbook.affected_components.forEach(item => {
+            content += `<div class="array-item">${escapeHtml(item)}</div>`;
+        });
+        content += `</div>`;
+    }
+
+    // Likely Causes
+    if (runbook.likely_causes && runbook.likely_causes.length > 0) {
+        content += `<div class="runbook-section"><h4>Likely Causes</h4>`;
+        runbook.likely_causes.forEach(item => {
+            content += `<div class="array-item">${escapeHtml(item)}</div>`;
+        });
+        content += `</div>`;
+    }
+
+    // Troubleshooting Steps
+    if (runbook.steps && runbook.steps.length > 0) {
+        content += `<div class="runbook-section"><h4>Troubleshooting Steps</h4>`;
+        runbook.steps.forEach((step, idx) => {
+            content += `<div class="array-item"><strong>Step ${idx + 1}:</strong> ${escapeHtml(step)}</div>`;
+        });
+        content += `</div>`;
+    }
+
+    // Escalation Criteria
+    if (runbook.escalation_criteria && runbook.escalation_criteria.length > 0) {
+        content += `<div class="runbook-section"><h4>Escalation Criteria</h4>`;
+        runbook.escalation_criteria.forEach(item => {
+            content += `<div class="array-item">${escapeHtml(item)}</div>`;
+        });
+        content += `</div>`;
+    }
+
+    expandedView.innerHTML = content;
+
+    // Add close button
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'card-close-btn';
+    closeBtn.textContent = 'Close';
+    closeBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        expandedView.remove();
+    });
+
+    expandedView.appendChild(closeBtn);
+    browseResults.appendChild(expandedView);
+}
+
+function updatePaginationControls() {
+    if (browseState.totalResults === 0) {
+        browsePagination.classList.add('hidden');
+        return;
+    }
+
+    browsePagination.classList.remove('hidden');
+    prevBtn.disabled = !browseState.hasPrev;
+    nextBtn.disabled = !browseState.hasNext;
+    pageInfo.textContent = `Page ${browseState.currentPage}`;
+}
+
+function showBrowseError(message) {
+    browseError.textContent = `❌ ${message}`;
+    browseError.classList.remove('hidden');
 }
 
 function escapeHtml(text) {
